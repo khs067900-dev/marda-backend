@@ -10,14 +10,20 @@ const path = require('path');
 
 const connectDB = require('./config/db');
 const errorHandler = require('./middlewares/errorHandler');
+const { validateNeoleapConfig } = require('./config/neoleap.config');
 
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const neoleapRoutes = require('./routes/neoleapRoutes');
 
 // Connect to DB
 connectDB();
+
+// Validate payment gateway configs
+validateNeoleapConfig();
+
 
 const app = express();
 
@@ -36,11 +42,21 @@ app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { succ
 // Static files (uploads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Payment-specific rate limiter (أكثر تقييداً)
+const paymentRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // 20 محاولة كل 15 دقيقة
+  message: { success: false, message: 'محاولات دفع كثيرة جداً. حاول بعد 15 دقيقة.' },
+  skipFailedRequests: false,
+});
+
 // Routes
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/orders', paymentRateLimiter, neoleapRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/admin', adminRoutes);
+
 
 // Health check
 app.get('/', (req, res) => {
