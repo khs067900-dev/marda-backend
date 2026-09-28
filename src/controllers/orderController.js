@@ -14,6 +14,9 @@ exports.createOrder = asyncHandler(async (req, res) => {
   const orderItems = [];
 
   for (const item of items) {
+    if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) {
+      throw new AppError('كمية المنتج يجب أن تكون عدداً صحيحاً أكبر من صفر', 400);
+    }
     const product = await Product.findById(item.productId);
     if (!product) throw new AppError(`المنتج غير موجود: ${item.productId}`, 404);
     if (product.stock < item.quantity) {
@@ -21,8 +24,16 @@ exports.createOrder = asyncHandler(async (req, res) => {
     }
     orderItems.push({ productId: product._id, name: product.name, price: product.price, quantity: item.quantity });
     totalPrice += product.price * item.quantity;
-    product.stock -= item.quantity;
-    await product.save();
+    // Checkout changes stock only. Do not revalidate legacy category values.
+    // The stock condition also prevents concurrent requests from overselling.
+    const stockUpdate = await Product.updateOne(
+      { _id: product._id, stock: { $gte: item.quantity } },
+      { $inc: { stock: -item.quantity } },
+      { runValidators: true }
+    );
+    if (stockUpdate.modifiedCount !== 1) {
+      throw new AppError(`المنتج "${product.name}" غير متوفر بالكمية المطلوبة`, 400);
+    }
   }
 
   const allowedPaymentMethods = ['cash_on_delivery', 'tap', 'noon_payments'];
