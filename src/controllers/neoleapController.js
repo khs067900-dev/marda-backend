@@ -19,8 +19,12 @@ function returnUrl() {
 
 function sessionResponse(payment) {
   return { success: true, data: {
-    paymentId: payment.neoleapPaymentId, redirectUrl: payment.redirectUrl,
-    merchantReference: payment.merchantReference, amount: payment.amount, currency: payment.currency,
+    // بيانات الـ form التي سيُرسلها الـ Frontend مباشرة لـ Neoleap
+    tranportalUrl: payment.tranportalUrl || process.env.NEOLEAP_TRANPORTAL_URL,
+    trandata: payment.trandata,
+    merchantReference: payment.merchantReference,
+    amount: payment.amount,
+    currency: payment.currency,
   } };
 }
 
@@ -32,9 +36,10 @@ exports.createNeoleapSession = asyncHandler(async (req, res) => {
   if (!Number.isFinite(order.totalPrice) || order.totalPrice <= 0) throw new AppError('مبلغ الطلب غير صالح', 400);
   if (!config.isConfigured()) throw new AppError('إعدادات Neoleap غير مكتملة.', 503);
 
+  // Idempotency: إعادة استخدام جلسة موجودة غير منتهية
   const existing = await NeoleapPayment.findOne({
     orderId: order._id, status: 'initiated', expiresAt: { $gt: new Date() },
-    redirectUrl: { $exists: true }, amount: order.totalPrice,
+    trandata: { $exists: true }, amount: order.totalPrice,
   }).sort({ createdAt: -1 });
   if (existing) return res.json(sessionResponse(existing));
 
@@ -43,27 +48,33 @@ exports.createNeoleapSession = asyncHandler(async (req, res) => {
     merchantReference: service.generateMerchantReference(), environment: config.environment, status: 'pending',
   });
   try {
+    const responseUrl = resultUrl(order._id);
     const session = await service.createPaymentSession({
       trackId: payment.merchantReference, amount: payment.amount,
-      responseUrl: returnUrl(), errorUrl: returnUrl(),
+      responseUrl, errorUrl: responseUrl,
     });
-    payment.neoleapPaymentId = session.paymentId;
-    payment.redirectUrl = session.redirectUrl;
-    // Local reuse window; the gateway still controls actual expiry.
+
+    // حفظ بيانات الـ form في الـ payment record
+    payment.trandata = session.trandata;
+    payment.tranportalUrl = session.tranportalUrl;
     payment.expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     payment.status = 'initiated';
     await payment.save();
+
     order.paymentMethod = 'neoleap';
     await order.save();
+
+    console.log(`[Neoleap] ✅ جلسة دفع جاهزة - Ref: ${payment.merchantReference}, Amount: ${payment.amount}`);
     return res.json(sessionResponse(payment));
   } catch (error) {
     payment.status = 'failed';
     payment.failureReason = error instanceof AppError ? error.message : 'Neoleap session creation failed';
     await payment.save();
-    console.error('[Neoleap] Session failed:', error.cause?.code || error.name);
+    console.error('[Neoleap] Session failed:', error.message);
     throw error instanceof AppError ? error : new AppError('فشل إنشاء جلسة الدفع. يرجى المحاولة لاحقاً.', 502);
   }
 });
+
 
 async function recordGatewayResult(payment, parsed) {
   if (!service.matchesPayment(parsed, payment)) throw new AppError('بيانات نتيجة الدفع لا تطابق الطلب', 400);
