@@ -55,9 +55,7 @@ const neoleapConfig = {
   cancelUrl: process.env.NEOLEAP_CANCEL_URL,
   callbackUrl: process.env.NEOLEAP_CALLBACK_URL,
 
-  // SAR currency code - ISO 4217 numeric: 682
-  // تحقق من documentation الخاص بـ Neoleap لتأكيد الكود المطلوب
-  // currencyCode: '682', // SAR ISO numeric
+  // The REST request uses currencyCode "682"; local records use "SAR".
   currency: 'SAR',
 
   // Helpers

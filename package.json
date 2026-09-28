@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "test:neoleap": "node --test test/neoleap.test.js test/neoleapController.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

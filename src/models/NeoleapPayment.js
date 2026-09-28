@@ -60,6 +60,7 @@ const neoleapPaymentSchema = new mongoose.Schema(
     // بيانات Neoleap (تُملأ بعد الاستجابة)
     neoleapTransactionId: { type: String, index: true },
     neoleapPaymentId: { type: String },
+    redirectUrl: { type: String },
     trackId: { type: String },
 
     // نتيجة العملية

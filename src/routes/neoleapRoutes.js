@@ -16,6 +16,7 @@ const {
 // POST /api/orders/neoleap-callback - callback من Neoleap (بدون auth)
 // يجب تسجيل هذا الـ URL في لوحة Neoleap
 router.post('/neoleap-callback', neoleapCallback);
+router.route('/neoleap/return').get(neoleapCallback).post(neoleapCallback);
 
 // POST /api/orders/:id/neoleap-session - إنشاء جلسة دفع
 router.post('/:id/neoleap-session', createNeoleapSession);
