@@ -9,7 +9,7 @@ const run = async () => {
 
     const products = await Product.find({});
     let updated = 0;
-
+ss
     for (const product of products) {
       if (!product.description) continue;
 
