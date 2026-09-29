@@ -19,9 +19,7 @@ function returnUrl() {
 
 function sessionResponse(payment) {
   return { success: true, data: {
-    // بيانات الـ form التي سيُرسلها الـ Frontend مباشرة لـ Neoleap
-    tranportalUrl: payment.tranportalUrl || process.env.NEOLEAP_TRANPORTAL_URL,
-    trandata: payment.trandata,
+    redirectUrl: payment.redirectUrl,
     merchantReference: payment.merchantReference,
     amount: payment.amount,
     currency: payment.currency,
@@ -39,7 +37,7 @@ exports.createNeoleapSession = asyncHandler(async (req, res) => {
   // Idempotency: إعادة استخدام جلسة موجودة غير منتهية
   const existing = await NeoleapPayment.findOne({
     orderId: order._id, status: 'initiated', expiresAt: { $gt: new Date() },
-    trandata: { $exists: true }, amount: order.totalPrice,
+    redirectUrl: { $type: 'string', $ne: '' }, neoleapPaymentId: { $type: 'string', $ne: '' }, amount: order.totalPrice,
   }).sort({ createdAt: -1 });
   if (existing) return res.json(sessionResponse(existing));
 
@@ -48,15 +46,14 @@ exports.createNeoleapSession = asyncHandler(async (req, res) => {
     merchantReference: service.generateMerchantReference(), environment: config.environment, status: 'pending',
   });
   try {
-    const responseUrl = resultUrl(order._id);
+    const responseUrl = returnUrl();
     const session = await service.createPaymentSession({
       trackId: payment.merchantReference, amount: payment.amount,
       responseUrl, errorUrl: responseUrl,
     });
 
-    // حفظ بيانات الـ form في الـ payment record
-    payment.trandata = session.trandata;
-    payment.tranportalUrl = session.tranportalUrl;
+    payment.neoleapPaymentId = session.paymentId;
+    payment.redirectUrl = session.redirectUrl;
     payment.expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     payment.status = 'initiated';
     await payment.save();

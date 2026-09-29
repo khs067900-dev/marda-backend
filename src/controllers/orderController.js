@@ -36,7 +36,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  const allowedPaymentMethods = ['cash_on_delivery', 'tap', 'noon_payments'];
+  const allowedPaymentMethods = ['cash_on_delivery', 'tap', 'noon_payments', 'neoleap'];
   const finalPaymentMethod = allowedPaymentMethods.includes(paymentMethod) ? paymentMethod : 'cash_on_delivery';
 
   const order = await Order.create({

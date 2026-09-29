@@ -94,37 +94,25 @@ class NeoleapService {
     if (!config.isConfigured()) throw new AppError('إعدادات Neoleap غير مكتملة.', 503);
     if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new AppError('مبلغ الطلب غير صالح', 400);
 
-    // ─── Tranportal Pattern ───
-    // الـ Tranportal لا يقبل server-to-server calls.
-    // الـ backend يُشفّر البيانات ويُرسلها للـ Frontend،
-    // والـ Frontend يُنشئ form تُرسل مباشرة لـ Neoleap عبر المتصفح.
-    const plainParams = [
-      `id=${config.tranportalId}`,
-      `password=${config.tranportalPassword}`,
-      `action=1`,
-      `amt=${Number(amount).toFixed(3)}`,
-      `currencyCode=682`,
-      `langid=ar`,
-      `trackId=${trackId}`,
-      `responseURL=${responseUrl}`,
-      `errorURL=${errorUrl}`,
-      `udf1=`,
-      `udf2=`,
-      `udf3=`,
-      `udf4=`,
-      `udf5=`,
-    ].join('&');
-
-    const trandata = this.encrypt(plainParams);
-
-    console.log(`[Neoleap] تم تشفير بيانات الدفع - TrackID: ${trackId}`);
-
-    // يُرجع بيانات الـ form التي سيُرسلها الـ Frontend مباشرة لـ Neoleap
-    return {
-      tranportalUrl: config.tranportalUrl,
-      trandata,
-      trackId,
-    };
+    const plain = [{ ...this._requestData(amount, trackId, '1'),
+      responseURL: responseUrl, errorURL: errorUrl, langid: 'ar' }];
+    const response = await this._post(config.hostedUrl, {
+      id: config.tranportalId, trandata: this.encrypt(JSON.stringify(plain)),
+      responseURL: responseUrl, errorURL: errorUrl,
+    });
+    const match = typeof response.result === 'string' && response.result.match(/^(\d+):(https:\/\/.+)$/);
+    if (String(response.status) !== '1' || !match) {
+      throw new AppError('لم تُرجع Neoleap رابط دفع صالحاً.', 502);
+    }
+    let url;
+    try {
+      url = new URL(match[2]);
+      if (url.protocol !== 'https:' || url.origin !== new URL(config.hostedUrl).origin || url.username || url.password) throw new Error('Invalid origin');
+    } catch {
+      throw new AppError('رابط الدفع المُعاد من Neoleap غير صالح.', 502);
+    }
+    url.searchParams.set('PaymentID', match[1]);
+    return { paymentId: match[1], redirectUrl: url.toString(), trackId: String(trackId) };
   }
 
 

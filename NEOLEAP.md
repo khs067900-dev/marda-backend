@@ -31,8 +31,22 @@ Run from `backend`:
 npm run test:neoleap
 ```
 
-The 17 offline tests use synthetic credentials and mock gateway responses. They cover encryption interoperability, request/response formats, numeric ID precision, redirection, inquiry, notification acknowledgement, session reuse, and rejection of forged/mismatched payment results.
+The 21 offline tests use synthetic credentials and mock gateway responses. They cover encryption interoperability, request/response formats, numeric ID precision, redirection, inquiry, notification acknowledgement, session reuse, and rejection of forged/mismatched payment results.
 
 On 2026-09-28, the local server health check succeeded. A test-account session request for the existing order failed with `UND_ERR_CONNECT_TIMEOUT` before an HTTP response was received from Neoleap. It now returns HTTP 503 with a useful connection message. No card transaction was submitted. End-to-end gateway acceptance and settlement remain unverified until connectivity and public HTTPS callbacks are available.
 
 If the connection timeout persists, check outbound HTTPS access to the account's gateway hostname and ask Neoleap whether the test account requires source-IP allowlisting. The timeout alone does not establish whether allowlisting, a network restriction, or gateway availability is responsible.
+
+## Checkout regression fixed on 2026-09-29
+
+The session service and controller had switched to returning form data, while the frontend and Mongoose schema still expected a hosted redirect. This caused a successful API response without redirectUrl, triggering the checkout error before the browser reached Neoleap. Five of the original 17 tests failed before the repair.
+
+Restored the documented hosted JSON request and paymentId:URL response, persisted the gateway ID and redirect, excluded incomplete legacy sessions from reuse, and routed gateway returns to the backend handler. Order creation now retains the neoleap payment method. All 21 offline tests pass, including added coverage of persisted sessions, backend callback routing, gateway failures, malformed redirects and existing URL query parameters.
+
+Live checks from this machine on 2026-09-29:
+- DNS resolves securepayments.neoleap.com.sa to 185.148.150.98.
+- Both configured hosted.htm and tranportal.htm endpoints time out before an HTTP response (UND_ERR_CONNECT_TIMEOUT).
+- A real session request using the configured test-account credentials also times out and returns the expected HTTP 503 error. No card transaction was submitted.
+- BACKEND_URL and FRONTEND_URL are localhost addresses. End-to-end notifications require public HTTPS URLs.
+
+Gateway acceptance and completed payment remain unverified. Ask the provider to confirm the account-specific test endpoint and whether outbound source-IP allowlisting is required; these checks do not establish the cause of the connection timeout. Deploy/restart the backend with this fix and configure reachable public return URLs before an end-to-end payment test.

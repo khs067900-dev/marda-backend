@@ -121,3 +121,24 @@ test('merchant reference is numeric and unique across generated samples', () => 
   assert(ids.every(id => /^\d+$/.test(id)));
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('rejects malformed, unsuccessful and insecure hosted redirects', async () => {
+  for (const response of [
+    { status: '0', result: paymentId + ':https://gateway.example/pay' },
+    { status: '1' },
+    { status: '1', result: 'https://gateway.example/pay' },
+    { status: '1', result: paymentId + ':http://gateway.example/pay' },
+    { status: '1', result: paymentId + ':https://user:password@gateway.example/pay' },
+  ]) {
+    global.fetch = async () => new Response(JSON.stringify([response]));
+    await assert.rejects(service.createPaymentSession(details), e => e.statusCode === 502);
+  }
+});
+
+test('preserves gateway query parameters while setting the exact PaymentID', async () => {
+  global.fetch = async () => new Response(JSON.stringify([{ status: '1', result: paymentId + ':https://gateway.example/pay?lang=ar&PaymentID=wrong' }]));
+  const session = await service.createPaymentSession(details);
+  const url = new URL(session.redirectUrl);
+  assert.equal(url.searchParams.get('lang'), 'ar');
+  assert.deepEqual(url.searchParams.getAll('PaymentID'), [paymentId]);
+});
